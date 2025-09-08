@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Merger - Modern SPA</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --earth-brown: #8B4513;
+            --warm-beige: #F5E6D3;
+            --sand: #E5D4B1;
+            --sage: #9CAF88;
+            --clay: #CD853F;
+            --stone: #A0826D;
+            --dark-brown: #654321;
+            --light-cream: #FDF5E6;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--warm-beige) 0%, var(--sand) 100%);
+            min-height: 100vh;
+            color: var(--dark-brown);
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--earth-brown) 0%, var(--clay) 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(139, 69, 19, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .card {
+            background: var(--light-cream);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(139, 69, 19, 0.1);
+            padding: 2rem;
+            margin: 2rem 0;
+            border: 1px solid rgba(139, 69, 19, 0.1);
+        }
+
+        .upload-zone {
+            border: 3px dashed var(--sage);
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: rgba(156, 175, 136, 0.05);
+            cursor: pointer;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--earth-brown);
+            background: rgba(139, 69, 19, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--clay);
+            background: rgba(205, 133, 63, 0.1);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            color: var(--sage);
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--sage) 0%, var(--stone) 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(156, 175, 136, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(156, 175, 136, 0.4);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--earth-brown) 0%, var(--clay) 100%);
+            box-shadow: 0 4px 12px rgba(139, 69, 19, 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 20px rgba(139, 69, 19, 0.4);
+        }
+
+        .file-list {
+            margin-top: 2rem;
+        }
+
+        .file-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-left: 4px solid var(--sage);
+            box-shadow: 0 2px 8px rgba(139, 69, 19, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-info h4 {
+            color: var(--earth-brown);
+            margin-bottom: 0.25rem;
+        }
+
+        .file-info p {
+            color: var(--stone);
+            font-size: 0.9rem;
+        }
+
+        .sheet-selector {
+            margin: 0.5rem 0;
+        }
+
+        .sheet-selector select {
+            background: var(--warm-beige);
+            border: 2px solid var(--sage);
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: var(--dark-brown);
+            font-size: 0.9rem;
+        }
+
+        .header-comparison {
+            background: var(--warm-beige);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        .header-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+        }
+
+        .header-tag {
+            background: var(--sage);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .header-tag.mismatch {
+            background: #D2691E;
+        }
+
+        .progress-bar {
+            background: var(--sand);
+            border-radius: 10px;
+            height: 8px;
+            margin: 1rem 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, var(--sage) 0%, var(--earth-brown) 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(139, 69, 19, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--earth-brown);
+        }
+
+        .stat-label {
+            color: var(--stone);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .error-message {
+            background: #FFF5F5;
+            border: 1px solid #FEB2B2;
+            color: #C53030;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        .success-message {
+            background: #F0FFF4;
+            border: 1px solid #9AE6B4;
+            color: #276749;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .spinner {
+            border: 3px solid var(--sand);
+            border-top: 3px solid var(--earth-brown);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--light-cream);
+            padding: 2rem;
+            border-radius: 16px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .card {
+                padding: 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>File Merger</h1>
+        <p>รวมไฟล์ CSV และ Excel หลายไฟล์เข้าด้วยกันอย่างง่ายดาย</p>
+    </div>
+
+    <div class="container">
+        <!-- Upload Section -->
+        <div class="card">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">📁 อัปโหลดไฟล์</h2>
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-icon">📂</div>
+                <h3>ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</h3>
+                <p style="margin-top: 0.5rem; color: var(--stone);">รองรับไฟล์ CSV และ Excel (.xlsx, .xls)</p>
+                <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" style="display: none;">
+            </div>
+            
+            <div id="fileList" class="file-list hidden">
+                <h3 style="color: var(--earth-brown); margin: 1rem 0;">ไฟล์ที่อัปโหลด</h3>
+                <div id="files"></div>
+            </div>
+        </div>
+
+        <!-- Header Comparison Section -->
+        <div id="headerSection" class="card hidden">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">🔍 ตรวจสอบ Headers</h2>
+            <div id="headerComparison"></div>
+            <button class="btn btn-primary" id="adjustHeadersBtn">ปรับแต่ง Headers</button>
+        </div>
+
+        <!-- Merge Controls -->
+        <div id="mergeSection" class="card hidden">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">⚙️ การรวมไฟล์</h2>
+            <button class="btn btn-primary" id="mergeBtn">เริ่มรวมไฟล์</button>
+            
+            <div id="progressSection" class="hidden">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p id="progressText" style="text-align: center; color: var(--stone);">กำลังประมวลผล...</p>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div id="statsSection" class="card hidden">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">📊 สถิติการรวมไฟล์</h2>
+            <div class="stats-grid" id="statsGrid"></div>
+        </div>
+
+        <!-- Download Section -->
+        <div id="downloadSection" class="card hidden">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">⬇️ ดาวน์โหลดผลลัพธ์</h2>
+            <button class="btn btn-primary" id="downloadBtn">ดาวน์โหลดไฟล์ที่รวมแล้ว</button>
+        </div>
+    </div>
+
+    <!-- Header Adjustment Modal -->
+    <div id="headerModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 style="color: var(--earth-brown); margin-bottom: 1rem;">ปรับแต่ง Headers</h2>
+            <div id="headerAdjustment"></div>
+            <div style="text-align: center; margin-top: 2rem;">
+                <button class="btn" id="cancelAdjustment" style="margin-right: 1rem;">ยกเลิก</button>
+                <button class="btn btn-primary" id="saveAdjustment">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class FileMerger {
+            constructor() {
+                this.files = [];
+                this.processedData = [];
+                this.mergedData = [];
+                this.headers = [];
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                const uploadZone = document.getElementById('uploadZone');
+                const fileInput = document.getElementById('fileInput');
+
+                // Upload zone events
+                uploadZone.addEventListener('click', () => fileInput.click());
+                uploadZone.addEventListener('dragover', this.handleDragOver.bind(this));
+                uploadZone.addEventListener('dragleave', this.handleDragLeave.bind(this));
+                uploadZone.addEventListener('drop', this.handleDrop.bind(this));
+
+                // File input change
+                fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+
+                // Button events
+                document.getElementById('adjustHeadersBtn').addEventListener('click', this.showHeaderModal.bind(this));
+                document.getElementById('mergeBtn').addEventListener('click', this.mergeFiles.bind(this));
+                document.getElementById('downloadBtn').addEventListener('click', this.downloadMergedFile.bind(this));
+                document.getElementById('cancelAdjustment').addEventListener('click', this.hideHeaderModal.bind(this));
+                document.getElementById('saveAdjustment').addEventListener('click', this.saveHeaderAdjustment.bind(this));
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                e.currentTarget.classList.add('dragover');
+            }
+
+            handleDragLeave(e) {
+                e.currentTarget.classList.remove('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files);
+                this.addFiles(files);
+            }
+
+            handleFileSelect(e) {
+                const files = Array.from(e.target.files);
+                this.addFiles(files);
+            }
+
+            async addFiles(files) {
+                const validFiles = files.filter(file => 
+                    file.type === 'text/csv' || 
+                    file.name.endsWith('.csv') || 
+                    file.name.endsWith('.xlsx') || 
+                    file.name.endsWith('.xls')
+                );
+
+                for (const file of validFiles) {
+                    const fileData = {
+                        file: file,
+                        name: file.name,
+                        size: file.size,
+                        type: file.name.endsWith('.csv') ? 'csv' : 'excel',
+                        sheets: [],
+                        selectedSheet: 0,
+                        data: null,
+                        headers: []
+                    };
+
+                    if (fileData.type === 'excel') {
+                        await this.loadExcelSheets(fileData);
+                    } else {
+                        await this.loadCsvData(fileData);
+                    }
+
+                    this.files.push(fileData);
+                }
+
+                this.updateFileList();
+                this.analyzeHeaders();
+            }
+
+            async loadExcelSheets(fileData) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        fileData.sheets = workbook.SheetNames;
+                        fileData.workbook = workbook;
+                        this.loadExcelSheet(fileData, 0);
+                        resolve();
+                    };
+                    reader.readAsArrayBuffer(fileData.file);
+                });
+            }
+
+            loadExcelSheet(fileData, sheetIndex) {
+                const sheetName = fileData.sheets[sheetIndex];
+                const worksheet = fileData.workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                if (jsonData.length > 0) {
+                    fileData.headers = jsonData[0];
+                    fileData.data = jsonData.slice(1);
+                }
+                fileData.selectedSheet = sheetIndex;
+            }
+
+            async loadCsvData(fileData) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        Papa.parse(e.target.result, {
+                            header: false,
+                            skipEmptyLines: true,
+                            complete: (results) => {
+                                if (results.data.length > 0) {
+                                    fileData.headers = results.data[0];
+                                    fileData.data = results.data.slice(1);
+                                }
+                                resolve();
+                            }
+                        });
+                    };
+                    reader.readAsText(fileData.file);
+                });
+            }
+
+            updateFileList() {
+                const fileList = document.getElementById('fileList');
+                const filesContainer = document.getElementById('files');
+                
+                if (this.files.length === 0) {
+                    fileList.classList.add('hidden');
+                    return;
+                }
+
+                fileList.classList.remove('hidden');
+                filesContainer.innerHTML = '';
+
+                this.files.forEach((fileData, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    
+                    const fileInfo = document.createElement('div');
+                    fileInfo.className = 'file-info';
+                    
+                    const fileName = document.createElement('h4');
+                    fileName.textContent = fileData.name;
+                    
+                    const fileDetails = document.createElement('p');
+                    fileDetails.textContent = `${(fileData.size / 1024).toFixed(2)} KB • ${fileData.headers.length} คอลัมน์ • ${fileData.data ? fileData.data.length : 0} แถว`;
+                    
+                    fileInfo.appendChild(fileName);
+                    fileInfo.appendChild(fileDetails);
+
+                    if (fileData.sheets.length > 1) {
+                        const sheetSelector = document.createElement('div');
+                        sheetSelector.className = 'sheet-selector';
+                        
+                        const label = document.createElement('label');
+                        label.textContent = 'Sheet: ';
+                        
+                        const select = document.createElement('select');
+                        fileData.sheets.forEach((sheet, sheetIndex) => {
+                            const option = document.createElement('option');
+                            option.value = sheetIndex;
+                            option.textContent = sheet;
+                            if (sheetIndex === fileData.selectedSheet) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+                        
+                        select.addEventListener('change', (e) => {
+                            this.loadExcelSheet(fileData, parseInt(e.target.value));
+                            this.updateFileList();
+                            this.analyzeHeaders();
+                        });
+                        
+                        sheetSelector.appendChild(label);
+                        sheetSelector.appendChild(select);
+                        fileInfo.appendChild(sheetSelector);
+                    }
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'btn';
+                    removeBtn.textContent = 'ลบ';
+                    removeBtn.style.padding = '0.5rem 1rem';
+                    removeBtn.addEventListener('click', () => this.removeFile(index));
+
+                    fileItem.appendChild(fileInfo);
+                    fileItem.appendChild(removeBtn);
+                    filesContainer.appendChild(fileItem);
+                });
+            }
+
+            removeFile(index) {
+                this.files.splice(index, 1);
+                this.updateFileList();
+                this.analyzeHeaders();
+            }
+
+            analyzeHeaders() {
+                if (this.files.length === 0) {
+                    document.getElementById('headerSection').classList.add('hidden');
+                    document.getElementById('mergeSection').classList.add('hidden');
+                    return;
+                }
+
+                // Get all unique headers
+                const allHeaders = new Set();
+                this.files.forEach(fileData => {
+                    fileData.headers.forEach(header => allHeaders.add(header));
+                });
+                this.headers = Array.from(allHeaders);
+
+                // Check for mismatches
+                const headerComparison = document.getElementById('headerComparison');
+                headerComparison.innerHTML = '';
+
+                let hasHeaderMismatch = false;
+
+                this.files.forEach((fileData, index) => {
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'header-comparison';
+                    
+                    const title = document.createElement('h4');
+                    title.textContent = fileData.name;
+                    title.style.color = 'var(--earth-brown)';
+                    title.style.marginBottom = '0.5rem';
+                    fileDiv.appendChild(title);
+
+                    const headerRow = document.createElement('div');
+                    headerRow.className = 'header-row';
+
+                    fileData.headers.forEach(header => {
+                        const tag = document.createElement('span');
+                        tag.className = 'header-tag';
+                        tag.textContent = header;
+                        
+                        // Check if this header exists in all files
+                        const existsInAllFiles = this.files.every(f => f.headers.includes(header));
+                        if (!existsInAllFiles) {
+                            tag.classList.add('mismatch');
+                            hasHeaderMismatch = true;
+                        }
+                        
+                        headerRow.appendChild(tag);
+                    });
+
+                    fileDiv.appendChild(headerRow);
+                    headerComparison.appendChild(fileDiv);
+                });
+
+                document.getElementById('headerSection').classList.remove('hidden');
+                
+                if (hasHeaderMismatch) {
+                    const warningDiv = document.createElement('div');
+                    warningDiv.className = 'error-message';
+                    warningDiv.textContent = '⚠️ พบความไม่สอดคล้องของ Headers - กรุณาปรับแต่งก่อนดำเนินการรวมไฟล์';
+                    headerComparison.insertBefore(warningDiv, headerComparison.firstChild);
+                } else {
+                    const successDiv = document.createElement('div');
+                    successDiv.className = 'success-message';
+                    successDiv.textContent = '✅ Headers ทั้งหมดสอดคล้องกัน - พร้อมสำหรับการรวมไฟล์';
+                    headerComparison.insertBefore(successDiv, headerComparison.firstChild);
+                    document.getElementById('mergeSection').classList.remove('hidden');
+                }
+            }
+
+            showHeaderModal() {
+                document.getElementById('headerModal').classList.remove('hidden');
+                this.buildHeaderAdjustmentUI();
+            }
+
+            hideHeaderModal() {
+                document.getElementById('headerModal').classList.add('hidden');
+            }
+
+            buildHeaderAdjustmentUI() {
+                const container = document.getElementById('headerAdjustment');
+                container.innerHTML = '';
+
+                this.files.forEach((fileData, fileIndex) => {
+                    const fileSection = document.createElement('div');
+                    fileSection.style.marginBottom = '2rem';
+
+                    const title = document.createElement('h3');
+                    title.textContent = fileData.name;
+                    title.style.color = 'var(--earth-brown)';
+                    title.style.marginBottom = '1rem';
+                    fileSection.appendChild(title);
+
+                    fileData.headers.forEach((header, headerIndex) => {
+                        const headerRow = document.createElement('div');
+                        headerRow.style.display = 'flex';
+                        headerRow.style.alignItems = 'center';
+                        headerRow.style.marginBottom = '0.5rem';
+
+                        const label = document.createElement('label');
+                        label.textContent = `${header}: `;
+                        label.style.minWidth = '200px';
+                        label.style.marginRight = '1rem';
+
+                        const select = document.createElement('select');
+                        select.style.flex = '1';
+                        select.style.padding = '0.5rem';
+                        select.style.background = 'var(--warm-beige)';
+                        select.style.border = '2px solid var(--sage)';
+                        select.style.borderRadius = '6px';
+
+                        // Add options for all possible headers
+                        const noneOption = document.createElement('option');
+                        noneOption.value = '';
+                        noneOption.textContent = '-- ไม่ใช้ --';
+                        select.appendChild(noneOption);
+
+                        this.headers.forEach(globalHeader => {
+                            const option = document.createElement('option');
+                            option.value = globalHeader;
+                            option.textContent = globalHeader;
+                            if (header === globalHeader) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+
+                        select.dataset.fileIndex = fileIndex;
+                        select.dataset.headerIndex = headerIndex;
+
+                        headerRow.appendChild(label);
+                        headerRow.appendChild(select);
+                        fileSection.appendChild(headerRow);
+                    });
+
+                    container.appendChild(fileSection);
+                });
+            }
+
+            saveHeaderAdjustment() {
+                const selects = document.querySelectorAll('#headerAdjustment select');
+                
+                selects.forEach(select => {
+                    const fileIndex = parseInt(select.dataset.fileIndex);
+                    const headerIndex = parseInt(select.dataset.headerIndex);
+                    const newHeaderValue = select.value;
+                    
+                    if (newHeaderValue) {
+                        this.files[fileIndex].headers[headerIndex] = newHeaderValue;
+                    }
+                });
+
+                this.hideHeaderModal();
+                this.analyzeHeaders();
+            }
+
+            async mergeFiles() {
+                if (this.files.length === 0) return;
+
+                document.getElementById('progressSection').classList.remove('hidden');
+                document.getElementById('mergeBtn').disabled = true;
+
+                this.mergedData = [];
+                let totalRecords = 0;
+
+                // Calculate total records for progress
+                this.files.forEach(fileData => {
+                    totalRecords += fileData.data.length;
+                });
+
+                let processedRecords = 0;
+
+                for (const fileData of this.files) {
+                    for (const row of fileData.data) {
+                        const mergedRow = {};
+                        
+                        // Map data according to headers
+                        fileData.headers.forEach((header, index) => {
+                            mergedRow[header] = row[index] || '';
+                        });
+
+                        this.mergedData.push(mergedRow);
+                        processedRecords++;
+
+                        // Update progress
+                        const progress = (processedRecords / totalRecords) * 100;
+                        document.getElementById('progressFill').style.width = `${progress}%`;
+                        document.getElementById('progressText').textContent = 
+                            `ประมวลผล ${processedRecords}/${totalRecords} แถว (${progress.toFixed(1)}%)`;
+
+                        // Allow UI to update
+                        if (processedRecords % 100 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 1));
+                        }
+                    }
+                }
+
+                this.showStatistics();
+                document.getElementById('downloadSection').classList.remove('hidden');
+                document.getElementById('mergeBtn').disabled = false;
+            }
+
+            showStatistics() {
+                const statsGrid = document.getElementById('statsGrid');
+                statsGrid.innerHTML = '';
+
+                const stats = [
+                    { label: 'จำนวนไฟล์ที่รวม', value: this.files.length },
+                    { label: 'จำนวนแถวรวม', value: this.mergedData.length },
+                    { label: 'จำนวนคอลัมน์', value: this.headers.length },
+                    { label: 'ไฟล์ก่อนรวม (แถว)', value: this.files.reduce((sum, f) => sum + f.data.length, 0) }
+                ];
+
+                stats.forEach(stat => {
+                    const statCard = document.createElement('div');
+                    statCard.className = 'stat-card';
+
+                    const number = document.createElement('div');
+                    number.className = 'stat-number';
+                    number.textContent = stat.value.toLocaleString();
+
+                    const label = document.createElement('div');
+                    label.className = 'stat-label';
+                    label.textContent = stat.label;
+
+                    statCard.appendChild(number);
+                    statCard.appendChild(label);
+                    statsGrid.appendChild(statCard);
+                });
+
+                document.getElementById('statsSection').classList.remove('hidden');
+            }
+
+            downloadMergedFile() {
+                if (this.mergedData.length === 0) return;
+
+                // Convert merged data to CSV format
+                const csvContent = this.convertToCSV(this.mergedData);
+                
+                // Create blob and download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                link.setAttribute('href', url);
+                link.setAttribute('download', `merged_file_${new Date().toISOString().slice(0, 10)}.csv`);
+                link.style.visibility = 'hidden';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                URL.revokeObjectURL(url);
+            }
+
+            convertToCSV(data) {
+                if (data.length === 0) return '';
+
+                // Get all unique headers from the data
+                const headers = Object.keys(data[0]);
+                
+                // Create CSV content
+                let csv = headers.join(',') + '\n';
+                
+                data.forEach(row => {
+                    const values = headers.map(header => {
+                        const value = row[header] || '';
+                        // Escape commas and quotes in CSV
+                        if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+                            return `"${value.replace(/"/g, '""')}"`;
+                        }
+                        return value;
+                    });
+                    csv += values.join(',') + '\n';
+                });
+
+                return csv;
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new FileMerger();
+        });
+    </script>
+</body>
+</html>
