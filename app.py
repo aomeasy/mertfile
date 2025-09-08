@@ -66,15 +66,6 @@ def load_css():
         margin: 1rem 0;
     }
     
-    .info-box {
-        background: #E6F3FF;
-        border: 1px solid #99D3F5;
-        color: #2B6CB0;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    
     .file-info {
         background: white;
         padding: 1rem;
@@ -98,37 +89,6 @@ def load_css():
         padding: 0.5rem;
         margin: 0.5rem 0;
         border: 1px solid #ddd;
-    }
-    
-    .empty-column-item {
-        background: #FFF5F5;
-        border: 1px solid #FEB2B2;
-        border-radius: 6px;
-        padding: 0.8rem;
-        margin: 0.3rem 0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .keep-column-item {
-        background: #F0FFF4;
-        border: 1px solid #9AE6B4;
-        border-radius: 6px;
-        padding: 0.8rem;
-        margin: 0.3rem 0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .column-analysis-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-        margin: 1rem 0;
     }
     
     /* Hide Streamlit style elements */
@@ -238,49 +198,6 @@ class FileMerger:
             return pd.concat(merged_dfs, ignore_index=True, sort=False)
         return pd.DataFrame()
     
-    def analyze_empty_columns(self, df: pd.DataFrame) -> Dict:
-        """Analyze empty or mostly empty columns in the merged DataFrame"""
-        column_analysis = {}
-        total_rows = len(df)
-        
-        for col in df.columns:
-            if col == '_source_file':  # Skip source file column
-                continue
-                
-            # Count non-null values
-            non_null_count = df[col].count()
-            null_count = total_rows - non_null_count
-            null_percentage = (null_count / total_rows) * 100
-            
-            # Check for empty strings or whitespace
-            if df[col].dtype == 'object':
-                # Count empty strings and whitespace
-                empty_string_count = df[col].fillna('').astype(str).str.strip().eq('').sum()
-                effective_empty_count = null_count + empty_string_count
-                effective_empty_percentage = (effective_empty_count / total_rows) * 100
-            else:
-                effective_empty_count = null_count
-                effective_empty_percentage = null_percentage
-            
-            # Get sample of non-empty values
-            non_empty_values = df[col].dropna()
-            if df[col].dtype == 'object':
-                non_empty_values = non_empty_values[non_empty_values.astype(str).str.strip() != '']
-            
-            sample_values = non_empty_values.head(3).tolist() if len(non_empty_values) > 0 else []
-            
-            column_analysis[col] = {
-                'null_count': null_count,
-                'null_percentage': null_percentage,
-                'effective_empty_count': effective_empty_count,
-                'effective_empty_percentage': effective_empty_percentage,
-                'non_empty_count': total_rows - effective_empty_count,
-                'sample_values': sample_values,
-                'data_type': str(df[col].dtype)
-            }
-        
-        return column_analysis
-    
     def create_download_link(self, df: pd.DataFrame, filename: str) -> str:
         """Create download link for merged file"""
         csv = df.to_csv(index=False)
@@ -306,10 +223,6 @@ def main():
         st.session_state.processed_data = {}
     if 'merged_df' not in st.session_state:
         st.session_state.merged_df = None
-    if 'final_df' not in st.session_state:
-        st.session_state.final_df = None
-    if 'empty_columns_analysis' not in st.session_state:
-        st.session_state.empty_columns_analysis = {}
     
     merger = st.session_state.merger
     
@@ -328,8 +241,6 @@ def main():
                 st.session_state.processed_data = merger.process_uploaded_files(uploaded_files)
                 st.session_state.last_uploaded = uploaded_files
                 st.session_state.merged_df = None
-                st.session_state.final_df = None
-                st.session_state.empty_columns_analysis = {}
     
     # Main content
     if st.session_state.processed_data:
@@ -574,24 +485,16 @@ def main():
                 
                 st.session_state.merged_df = merged_df
                 
-                # Analyze empty columns
-                empty_analysis = merger.analyze_empty_columns(merged_df)
-                st.session_state.empty_columns_analysis = empty_analysis
-                
-                # Set initial final_df to merged_df
-                st.session_state.final_df = merged_df.copy()
-                
                 progress_bar.progress(100)
                 status_text.text('เสร็จสิ้น!')
                 
                 st.success(f"✅ รวมไฟล์สำเร็จ! ได้รับ {len(merged_df)} แถว")
         
-        # Show merged results and empty column analysis
+        # Show merged results
         if st.session_state.merged_df is not None:
             st.header("📊 ผลลัพธ์การรวมไฟล์")
             
             merged_df = st.session_state.merged_df
-            empty_analysis = st.session_state.empty_columns_analysis
             
             # Statistics
             col1, col2, col3, col4 = st.columns(4)
@@ -606,279 +509,9 @@ def main():
                 memory_usage = merged_df.memory_usage(deep=True).sum() / 1024 / 1024
                 st.metric("ใช้หน่วยความจำ", f"{memory_usage:.2f} MB")
             
-            # Empty Column Analysis Section
-            if empty_analysis:
-                st.markdown("""
-                <div class="column-analysis-header">
-                    <h2>🔍 การวิเคราะห์คอลัมน์ที่ไม่มีข้อมูล</h2>
-                    <p>ตรวจสอบและเลือกคอลัมน์ที่ต้องการลบออกก่อนดาวน์โหลด</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Find columns with high empty percentage
-                empty_columns = []
-                partially_empty_columns = []
-                full_columns = []
-                
-                for col, analysis in empty_analysis.items():
-                    if analysis['effective_empty_percentage'] >= 95:
-                        empty_columns.append((col, analysis))
-                    elif analysis['effective_empty_percentage'] >= 50:
-                        partially_empty_columns.append((col, analysis))
-                    else:
-                        full_columns.append((col, analysis))
-                
-                # Show summary
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.markdown(f"""
-                    <div class="stat-card" style="border-left-color: #EF4444;">
-                        <h4 style="color: #DC2626; margin: 0;">🗑️ คอลัมน์ที่แนะนำให้ลบ</h4>
-                        <p style="margin: 0.5rem 0;"><strong>{len(empty_columns)}</strong> คอลัมน์</p>
-                        <p style="margin: 0; font-size: 0.9em;">ข้อมูลว่าง ≥ 95%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"""
-                    <div class="stat-card" style="border-left-color: #F59E0B;">
-                        <h4 style="color: #D97706; margin: 0;">⚠️ คอลัมน์ที่ควรพิจารณา</h4>
-                        <p style="margin: 0.5rem 0;"><strong>{len(partially_empty_columns)}</strong> คอลัมน์</p>
-                        <p style="margin: 0; font-size: 0.9em;">ข้อมูลว่าง 50-94%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"""
-                    <div class="stat-card" style="border-left-color: #10B981;">
-                        <h4 style="color: #059669; margin: 0;">✅ คอลัมน์ที่มีข้อมูลดี</h4>
-                        <p style="margin: 0.5rem 0;"><strong>{len(full_columns)}</strong> คอลัมน์</p>
-                        <p style="margin: 0; font-size: 0.9em;">ข้อมูลว่าง < 50%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Column selection interface
-                if empty_columns or partially_empty_columns:
-                    st.markdown("""
-                    <div class="info-box">
-                        💡 <strong>คำแนะนำ:</strong> คลิกเพื่อเลือก/ยกเลิกคอลัมน์ที่ต้องการลบ 
-                        คอลัมน์ที่มีข้อมูลว่างมากจะช่วยลดขนาดไฟล์และเพิ่มประสิทธิภาพ
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Initialize columns to remove in session state
-                    if 'columns_to_remove' not in st.session_state:
-                        # Auto-select columns with >95% empty data
-                        st.session_state.columns_to_remove = [col for col, _ in empty_columns]
-                    
-                    # Create tabs for different categories
-                    if empty_columns or partially_empty_columns:
-                        tab1, tab2, tab3 = st.tabs([
-                            f"🗑️ แนะนำให้ลบ ({len(empty_columns)})",
-                            f"⚠️ ควรพิจารณา ({len(partially_empty_columns)})",
-                            f"✅ คอลัมน์ดี ({len(full_columns)})"
-                        ])
-                        
-                        with tab1:
-                            if empty_columns:
-                                st.markdown("**คอลัมน์ที่มีข้อมูลว่าง 95% ขึ้นไป:**")
-                                for col, analysis in empty_columns:
-                                    col1, col2 = st.columns([1, 3])
-                                    
-                                    with col1:
-                                        remove_col = st.checkbox(
-                                            "ลบคอลัมน์นี้",
-                                            value=col in st.session_state.columns_to_remove,
-                                            key=f"remove_{col}",
-                                            help=f"ลบคอลัมน์ {col} ออกจากไฟล์สุดท้าย"
-                                        )
-                                        
-                                        if remove_col and col not in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.append(col)
-                                        elif not remove_col and col in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.remove(col)
-                                    
-                                    with col2:
-                                        st.markdown(f"""
-                                        <div class="{'empty-column-item' if col in st.session_state.columns_to_remove else 'keep-column-item'}">
-                                            <div>
-                                                <strong>{col}</strong><br>
-                                                <span style="color: #666;">ข้อมูลว่าง: {analysis['effective_empty_percentage']:.1f}% 
-                                                ({analysis['effective_empty_count']:,}/{len(merged_df):,} แถว)</span><br>
-                                                <span style="color: #888; font-size: 0.9em;">
-                                                    ตัวอย่าง: {', '.join([str(v)[:20] + ('...' if len(str(v)) > 20 else '') for v in analysis['sample_values']]) if analysis['sample_values'] else 'ไม่มีข้อมูล'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            else:
-                                st.info("ไม่พบคอลัมน์ที่มีข้อมูลว่างมากกว่า 95%")
-                        
-                        with tab2:
-                            if partially_empty_columns:
-                                st.markdown("**คอลัมน์ที่มีข้อมูลว่าง 50-94%:**")
-                                for col, analysis in partially_empty_columns:
-                                    col1, col2 = st.columns([1, 3])
-                                    
-                                    with col1:
-                                        remove_col = st.checkbox(
-                                            "ลบคอลัมน์นี้",
-                                            value=col in st.session_state.columns_to_remove,
-                                            key=f"remove_partial_{col}",
-                                            help=f"ลบคอลัมน์ {col} ออกจากไฟล์สุดท้าย"
-                                        )
-                                        
-                                        if remove_col and col not in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.append(col)
-                                        elif not remove_col and col in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.remove(col)
-                                    
-                                    with col2:
-                                        st.markdown(f"""
-                                        <div class="{'empty-column-item' if col in st.session_state.columns_to_remove else 'keep-column-item'}">
-                                            <div>
-                                                <strong>{col}</strong><br>
-                                                <span style="color: #666;">ข้อมูลว่าง: {analysis['effective_empty_percentage']:.1f}% 
-                                                ({analysis['effective_empty_count']:,}/{len(merged_df):,} แถว)</span><br>
-                                                <span style="color: #888; font-size: 0.9em;">
-                                                    ตัวอย่าง: {', '.join([str(v)[:20] + ('...' if len(str(v)) > 20 else '') for v in analysis['sample_values']]) if analysis['sample_values'] else 'ไม่มีข้อมูล'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            else:
-                                st.info("ไม่พบคอลัมน์ที่มีข้อมูลว่าง 50-94%")
-                        
-                        with tab3:
-                            if full_columns:
-                                st.markdown("**คอลัมน์ที่มีข้อมูลดี (ข้อมูลว่างน้อยกว่า 50%):**")
-                                for col, analysis in full_columns:
-                                    col1, col2 = st.columns([1, 3])
-                                    
-                                    with col1:
-                                        remove_col = st.checkbox(
-                                            "ลบคอลัมน์นี้",
-                                            value=col in st.session_state.columns_to_remove,
-                                            key=f"remove_full_{col}",
-                                            help=f"ลบคอลัมน์ {col} ออกจากไฟล์สุดท้าย (ไม่แนะนำ)"
-                                        )
-                                        
-                                        if remove_col and col not in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.append(col)
-                                        elif not remove_col and col in st.session_state.columns_to_remove:
-                                            st.session_state.columns_to_remove.remove(col)
-                                    
-                                    with col2:
-                                        st.markdown(f"""
-                                        <div class="{'empty-column-item' if col in st.session_state.columns_to_remove else 'keep-column-item'}">
-                                            <div>
-                                                <strong>{col}</strong><br>
-                                                <span style="color: #666;">ข้อมูลว่าง: {analysis['effective_empty_percentage']:.1f}% 
-                                                ({analysis['effective_empty_count']:,}/{len(merged_df):,} แถว)</span><br>
-                                                <span style="color: #888; font-size: 0.9em;">
-                                                    ตัวอย่าง: {', '.join([str(v)[:20] + ('...' if len(str(v)) > 20 else '') for v in analysis['sample_values']]) if analysis['sample_values'] else 'ไม่มีข้อมูล'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            else:
-                                st.info("ไม่พบคอลัมน์ที่มีข้อมูลดี")
-                    
-                    # Quick action buttons
-                    st.markdown("---")
-                    st.subheader("🚀 การดำเนินการเร็ว")
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        if st.button("🗑️ ลบทั้งหมดที่แนะนำ", use_container_width=True):
-                            st.session_state.columns_to_remove = [col for col, _ in empty_columns]
-                            st.rerun()
-                    
-                    with col2:
-                        if st.button("⚠️ ลบที่ว่าง > 75%", use_container_width=True):
-                            cols_to_remove = []
-                            for col, analysis in empty_analysis.items():
-                                if analysis['effective_empty_percentage'] > 75:
-                                    cols_to_remove.append(col)
-                            st.session_state.columns_to_remove = cols_to_remove
-                            st.rerun()
-                    
-                    with col3:
-                        if st.button("✅ เก็บทั้งหมด", use_container_width=True):
-                            st.session_state.columns_to_remove = []
-                            st.rerun()
-                    
-                    with col4:
-                        if st.button("🔄 รีเซ็ต", use_container_width=True):
-                            st.session_state.columns_to_remove = [col for col, _ in empty_columns]
-                            st.rerun()
-                    
-                    # Apply column removal
-                    if st.session_state.columns_to_remove:
-                        st.markdown("---")
-                        
-                        if st.button("🎯 ปรับปรุงไฟล์ (ลบคอลัมน์ที่เลือก)", type="primary", use_container_width=True):
-                            with st.spinner("กำลังปรับปรุงไฟล์..."):
-                                # Create final dataframe by removing selected columns
-                                columns_to_keep = [col for col in merged_df.columns if col not in st.session_state.columns_to_remove]
-                                st.session_state.final_df = merged_df[columns_to_keep].copy()
-                                
-                                removed_count = len(st.session_state.columns_to_remove)
-                                remaining_count = len(columns_to_keep)
-                                
-                                st.success(f"✅ ปรับปรุงเสร็จสิ้น! ลบ {removed_count} คอลัมน์ เหลือ {remaining_count} คอลัมน์")
-                        
-                        # Show summary of columns to be removed
-                        with st.expander(f"📋 รายการคอลัมน์ที่จะลบ ({len(st.session_state.columns_to_remove)} คอลัมน์)", expanded=False):
-                            for col in st.session_state.columns_to_remove:
-                                if col in empty_analysis:
-                                    analysis = empty_analysis[col]
-                                    st.write(f"• **{col}** - ข้อมูลว่าง {analysis['effective_empty_percentage']:.1f}%")
-                    else:
-                        # No columns to remove, use merged_df as final
-                        st.session_state.final_df = merged_df.copy()
-                        st.info("ไม่มีคอลัมน์ที่เลือกให้ลบ - ไฟล์จะใช้ข้อมูลทั้งหมด")
-                else:
-                    st.success("🎉 ไม่พบคอลัมน์ที่มีข้อมูลว่างมาก ข้อมูลของคุณมีคุณภาพดี!")
-                    st.session_state.final_df = merged_df.copy()
-            
-            # Data preview section
-            st.header("👁️ ตัวอย่างข้อมูลสุดท้าย")
-            
-            final_df = st.session_state.final_df if st.session_state.final_df is not None else merged_df
-            
-            # Show comparison if columns were removed
-            if st.session_state.final_df is not None and len(st.session_state.final_df.columns) != len(merged_df.columns):
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric(
-                        "คอลัมน์เดิม", 
-                        len(merged_df.columns),
-                        delta=None
-                    )
-                
-                with col2:
-                    st.metric(
-                        "คอลัมน์หลังปรับปรุง", 
-                        len(final_df.columns),
-                        delta=len(final_df.columns) - len(merged_df.columns)
-                    )
-                
-                with col3:
-                    original_size = len(merged_df.to_csv(index=False).encode('utf-8'))
-                    new_size = len(final_df.to_csv(index=False).encode('utf-8'))
-                    size_reduction = ((original_size - new_size) / original_size) * 100
-                    
-                    st.metric(
-                        "ลดขนาดไฟล์", 
-                        f"{size_reduction:.1f}%",
-                        delta=f"-{(original_size - new_size) / 1024:.1f} KB"
-                    )
-            
-            st.dataframe(final_df.head(100), use_container_width=True)
+            # Data preview
+            st.subheader("ตัวอย่างข้อมูล")
+            st.dataframe(merged_df.head(100), use_container_width=True)
             
             # Download section
             st.header("⬇️ ดาวน์โหลด")
@@ -887,7 +520,7 @@ def main():
             
             with col1:
                 filename = f"merged_file_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                csv_data = final_df.to_csv(index=False)
+                csv_data = merged_df.to_csv(index=False)
                 
                 st.download_button(
                     label="📥 ดาวน์โหลดไฟล์ CSV",
@@ -904,10 +537,10 @@ def main():
                 st.info(f"ขนาดไฟล์: {file_size:.2f} KB")
             
             # Data distribution chart
-            if '_source_file' in final_df.columns:
+            if '_source_file' in merged_df.columns:
                 st.subheader("📈 การกระจายข้อมูลตามไฟล์ต้นทาง")
                 
-                source_counts = final_df['_source_file'].value_counts()
+                source_counts = merged_df['_source_file'].value_counts()
                 
                 fig = px.pie(
                     values=source_counts.values,
@@ -943,8 +576,8 @@ def main():
             st.markdown("""
             ### 🔍 ตรวจสอบอัตโนมัติ
             - เช็ค Header consistency
-            - วิเคราะห์คอลัมน์ว่าง
             - แสดงข้อมูลสถิติ
+            - ตัวอย่างข้อมูล
             """)
         
         with col3:
@@ -952,7 +585,6 @@ def main():
             ### ⚙️ ปรับแต่งได้
             - Mapping Headers
             - เลือก/ลบ Headers
-            - ลบคอลัมน์ว่าง
             - ดาวน์โหลดผลลัพธ์
             """)
 
