@@ -75,6 +75,22 @@ def load_css():
         margin: 1rem 0;
     }
     
+    .header-mapping-section {
+        background: #FDF5E6;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+        border: 1px solid #E5D4B1;
+    }
+    
+    .sample-data {
+        background: white;
+        border-radius: 5px;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        border: 1px solid #ddd;
+    }
+    
     /* Hide Streamlit style elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -156,7 +172,7 @@ class FileMerger:
                 
         return all_headers_list, has_mismatch, file_headers
     
-    def merge_files(self, processed_data: Dict, selected_sheets: Dict, header_mapping: Dict = None) -> pd.DataFrame:
+    def merge_files(self, processed_data: Dict, selected_sheets: Dict, header_mapping: Dict = None, excluded_headers: Dict = None) -> pd.DataFrame:
         """Merge all files into a single DataFrame"""
         merged_dfs = []
         
@@ -164,6 +180,11 @@ class FileMerger:
             sheet_name = selected_sheets.get(filename, file_info['sheets'][0])
             if sheet_name in file_info['data']:
                 df = file_info['data'][sheet_name].copy()
+                
+                # Remove excluded headers first
+                if excluded_headers and filename in excluded_headers:
+                    columns_to_keep = [col for col in df.columns if col not in excluded_headers[filename]]
+                    df = df[columns_to_keep]
                 
                 # Apply header mapping if provided
                 if header_mapping and filename in header_mapping:
@@ -309,28 +330,90 @@ def main():
                             else:
                                 st.error(header)
             
-            # Header mapping interface
+            # Enhanced Header mapping interface
             st.subheader("ปรับแต่ง Header Mapping")
+            
             header_mapping = {}
+            excluded_headers = {}
             
             for filename, headers in file_headers.items():
-                st.write(f"**{filename}:**")
-                file_mapping = {}
-                cols = st.columns(2)
+                st.markdown(f"""
+                <div class="header-mapping-section">
+                    <h4>🗂️ {filename}</h4>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                for i, header in enumerate(headers):
-                    with cols[i % 2]:
-                        mapped_header = st.selectbox(
-                            f"Map '{header}' to:",
-                            [''] + all_headers,
-                            index=all_headers.index(header) + 1 if header in all_headers else 0,
-                            key=f"map_{filename}_{i}"
-                        )
-                        if mapped_header:
-                            file_mapping[header] = mapped_header
+                # Get sample data for this file
+                sheet_name = selected_sheets.get(filename, st.session_state.processed_data[filename]['sheets'][0])
+                sample_df = st.session_state.processed_data[filename]['data'][sheet_name].head(5)
+                
+                file_mapping = {}
+                file_excluded = []
+                
+                # Create tabs for better organization
+                tab1, tab2 = st.tabs(["🔄 การจับคู่ Headers", "📊 ตัวอย่างข้อมูล 5 แถวแรก"])
+                
+                with tab1:
+                    cols = st.columns(3)
+                    
+                    for i, header in enumerate(headers):
+                        with cols[i % 3]:
+                            # Header selection options
+                            action_options = ['ใช้งาน', 'ลบออก']
+                            action = st.radio(
+                                f"'{header}':",
+                                action_options,
+                                key=f"action_{filename}_{i}",
+                                index=0
+                            )
+                            
+                            if action == 'ใช้งาน':
+                                # Show mapping options
+                                mapped_header = st.selectbox(
+                                    f"จับคู่กับ:",
+                                    [header] + [h for h in all_headers if h != header] + ['-- สร้างใหม่ --'],
+                                    index=0,
+                                    key=f"map_{filename}_{i}"
+                                )
+                                
+                                if mapped_header == '-- สร้างใหม่ --':
+                                    custom_header = st.text_input(
+                                        f"ชื่อใหม่:",
+                                        value=header,
+                                        key=f"custom_{filename}_{i}"
+                                    )
+                                    if custom_header and custom_header != header:
+                                        file_mapping[header] = custom_header
+                                elif mapped_header != header:
+                                    file_mapping[header] = mapped_header
+                                    
+                                # Show sample data for this header
+                                if header in sample_df.columns:
+                                    st.markdown(f"""
+                                    <div class="sample-data">
+                                        <small><strong>ตัวอย่าง:</strong><br>
+                                        {sample_df[header].head(3).to_list()}
+                                        </small>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            else:
+                                file_excluded.append(header)
+                                st.markdown(f"<small style='color: red;'>❌ จะถูกลบออก</small>", unsafe_allow_html=True)
+                
+                with tab2:
+                    st.write("**ตัวอย่างข้อมูล 5 แถวแรก:**")
+                    st.dataframe(sample_df, use_container_width=True)
                 
                 if file_mapping:
                     header_mapping[filename] = file_mapping
+                if file_excluded:
+                    excluded_headers[filename] = file_excluded
+                
+                st.divider()
+            
+            # Store in session state for merge process
+            st.session_state.header_mapping = header_mapping
+            st.session_state.excluded_headers = excluded_headers
         
         else:
             st.markdown("""
@@ -338,7 +421,8 @@ def main():
                 ✅ Headers ทั้งหมดสอดคล้องกัน - พร้อมสำหรับการรวมไฟล์
             </div>
             """, unsafe_allow_html=True)
-            header_mapping = {}
+            st.session_state.header_mapping = {}
+            st.session_state.excluded_headers = {}
         
         # Merge button
         st.header("⚙️ การรวมไฟล์")
@@ -353,11 +437,12 @@ def main():
                     progress_bar.progress(i + 1)
                     status_text.text(f'กำลังประมวลผล... {i + 1}%')
                     
-                # Perform actual merge
+                # Perform actual merge with header mapping and exclusions
                 merged_df = merger.merge_files(
                     st.session_state.processed_data,
                     selected_sheets,
-                    header_mapping if has_mismatch else None
+                    st.session_state.get('header_mapping', {}),
+                    st.session_state.get('excluded_headers', {})
                 )
                 
                 st.session_state.merged_df = merged_df
@@ -461,7 +546,7 @@ def main():
             st.markdown("""
             ### ⚙️ ปรับแต่งได้
             - Mapping Headers
-            - เลือก Sheet
+            - เลือก/ลบ Headers
             - ดาวน์โหลดผลลัพธ์
             """)
 
