@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(
-    page_title="File Merger - by botAom",
+    page_title="File Merger - by Bot Aom",
     page_icon="📁",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -190,7 +190,7 @@ def main():
     # Header
     st.markdown("""
     <div class="main-header">
-        <h1>📁 File Merger - Modern SPA</h1>
+        <h1>📁 File Merger - by Bot Aom</h1>
         <p>รวมไฟล์ CSV และ Excel หลายไฟล์เข้าด้วยกัน</p>
     </div>
     """, unsafe_allow_html=True)
