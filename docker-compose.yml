@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  file-merger:
+    build: .
+    container_name: file-merger-app
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      # Optional: Mount local directory for development
+      # - .:/app
+      - /tmp:/tmp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - file-merger-network
+
+  # Optional: Add nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: file-merger-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Add SSL certificates if needed
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - file-merger
+    restart: unless-stopped
+    networks:
+      - file-merger-network
+
+networks:
+  file-merger-network:
+    driver: bridge
+
+# Optional: Add volumes for persistent data
+# volumes:
+#   app_data:
+#     driver: local
