@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(
-    page_title="File Merger - Modern SPA",
+    page_title="File Merger - by botAom",
     page_icon="📁",
     layout="wide",
     initial_sidebar_state="expanded"
